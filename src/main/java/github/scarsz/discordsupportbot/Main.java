@@ -19,7 +19,7 @@ public class Main {
                                 .replaceAll("/[^A-Za-z0-9.]/", "")
                         : "";
         File secretFile = new File(".secret");
-        String secret = args.length >= 2 && StringUtils.isNotBlank(args[0])
+        String secret = args.length >= 2 && StringUtils.isNotBlank(args[1])
                 ? args[1]
                 : secretFile.exists()
                         ? FileUtils.readFileToString(secretFile, Charset.forName("UTF-8"))
