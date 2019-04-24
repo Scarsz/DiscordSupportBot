@@ -1,5 +1,7 @@
 package github.scarsz.discordsupportbot;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import github.scarsz.discordsupportbot.discord.Bot;
 import github.scarsz.discordsupportbot.discord.LoggingHandler;
 import github.scarsz.discordsupportbot.sql.Database;
@@ -8,18 +10,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 public class Application extends Thread {
 
     private static Application instance = null;
 
     private final Logger logger = LoggerFactory.getLogger(Application.class);
+    private final LoggingHandler loggingHandler;
+    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private final ScheduledExecutorService service = Executors.newScheduledThreadPool(4);
     private Database database;
     private Bot bot;
     private Http http;
 
     public Application(String token, String secret) {
-        java.util.logging.Logger.getLogger("").addHandler(new LoggingHandler(this));
+        loggingHandler = new LoggingHandler(this);
+        java.util.logging.Logger.getLogger("").addHandler(loggingHandler);
 
         logger.info("Initializing support bot application");
 
@@ -79,15 +87,6 @@ public class Application extends Thread {
      */
     @Override
     public void run() {
-        if (database != null) {
-            try {
-                database.saveToFile();
-            } catch (SQLException e) {
-                logger.error("Failed to save SQL database to file, not good. ):");
-                e.printStackTrace();
-            }
-        }
-
         if (bot != null) {
             bot.shutdown();
         }
@@ -108,12 +107,24 @@ public class Application extends Thread {
         return database;
     }
 
+    public Gson getGson() {
+        return gson;
+    }
+
     public Bot getBot() {
         return bot;
     }
 
     public Http getHttp() {
         return http;
+    }
+
+    public LoggingHandler getLoggingHandler() {
+        return loggingHandler;
+    }
+
+    public ScheduledExecutorService getService() {
+        return service;
     }
 
 }

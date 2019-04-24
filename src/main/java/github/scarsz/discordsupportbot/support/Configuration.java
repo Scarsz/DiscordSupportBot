@@ -3,13 +3,13 @@ package github.scarsz.discordsupportbot.support;
 import github.scarsz.discordsupportbot.Application;
 import github.scarsz.discordsupportbot.sql.Database;
 import net.dv8tion.jda.core.entities.Category;
+import net.dv8tion.jda.core.entities.Role;
 import net.dv8tion.jda.core.entities.TextChannel;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.LinkedList;
 import java.util.List;
@@ -32,7 +32,7 @@ public class Configuration {
         String complete = String.join(", ", segments);
 
         try {
-            PreparedStatement statement = Database.sql("UPDATE `helpdesks` SET " + complete + " WHERE `uuid` = ?");
+            PreparedStatement statement = Database.sql("UPDATE helpdesks SET " + complete + " WHERE uuid = ?");
             for (int i = 0; i < parameters.length / 2; i++) {
                 statement.setObject(i + 1, parameters[(i * 2) + 1]);
             }
@@ -58,12 +58,12 @@ public class Configuration {
     }
 
     public TextChannel getChannel() {
-        String textChannelId = getTextChannelId();
+        String textChannelId = getChannelId();
         return StringUtils.isNumeric(textChannelId)
                 ? Application.get().getBot().getJda().getTextChannelById(textChannelId)
                 : null;
     }
-    public String getTextChannelId() {
+    public String getChannelId() {
         return Database.get(uuid, "helpdesks", "channel");
     }
     public void setChannel(String id) {
@@ -71,6 +71,29 @@ public class Configuration {
     }
     public void setChannel(TextChannel category) {
         setCategory(category.getId());
+    }
+
+    public Role getRole() {
+        String roleId = getRoleId();
+        return StringUtils.isNumeric(roleId)
+                ? Application.get().getBot().getJda().getRoleById(roleId)
+                : null;
+    }
+    public String getRoleId() {
+        return Database.get(uuid, "helpdesks", "role");
+    }
+    public void setRole(String id) {
+        set(uuid, "role", id);
+    }
+    public void setRole(Role role) {
+        setRole(role.getId());
+    }
+
+    public int getExpiration() {
+        return Database.get(uuid, "helpdesks", "expiration");
+    }
+    public void setExpiration(int minutes) {
+        set(uuid, "helpdesks", minutes);
     }
 
 }

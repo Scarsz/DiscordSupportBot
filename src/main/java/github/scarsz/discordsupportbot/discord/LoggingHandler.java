@@ -6,7 +6,6 @@ import net.dv8tion.jda.core.JDA;
 import net.dv8tion.jda.core.entities.Message;
 import net.dv8tion.jda.core.entities.MessageHistory;
 import net.dv8tion.jda.core.entities.TextChannel;
-import org.apache.commons.collections4.ListUtils;
 
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -35,9 +34,9 @@ public class LoggingHandler extends Handler {
             if (messages.size() == 0) {
                 break;
             } else if (messages.size() == 1) {
-                getChannel().deleteMessageById(messages.get(0).getId()).queue();
+                getChannel().deleteMessageById(messages.get(0).getId()).complete();
             } else {
-                getChannel().deleteMessages(messages).queue();
+                getChannel().deleteMessages(messages).complete();
             }
         }
     }
@@ -84,16 +83,28 @@ public class LoggingHandler extends Handler {
         return symbol + " [" + TimeUtil.timestamp(record.getMillis()) + "] " + loggerName + " > " + record.getMessage();
     }
 
-    public String build(List<LogRecord> records) {
-        if (records.size() == 0) return "```\n```";
+    public List<String> build(List<LogRecord> records) {
+        if (records.size() == 0) return Collections.singletonList("```\n```");
 
         Level level = records.get(0).getLevel();
         String language = level == Level.INFO ? "yaml" : "diff";
-        return "```" + language + "\n" +
-                records.stream()
-                        .map(this::format)
-                        .collect(Collectors.joining("\n")) +
-                "\n```" + (level == Level.SEVERE ? "<@95088531931672576>" : "");
+        List<String> lines = records.stream().map(this::format).collect(Collectors.toList());
+
+        List<String> result = new LinkedList<>();
+        final String lead = "```" + language + "\n";
+        StringBuilder builder = new StringBuilder(lead);
+        while (lines.size() > 0) {
+            String line = lines.remove(0);
+            if (builder.length() + line.length() + "\n```".length() <= 2000) {
+                builder.append(line).append("\n");
+            } else {
+                result.add(builder.append("```").toString());
+                builder = new StringBuilder(lead);
+            }
+        }
+        if (builder.length() > lead.length()) result.add(builder.append("```").toString());
+        if (level == Level.SEVERE) result.add("<@95088531931672576>");
+        return result;
     }
 
     @Override
@@ -117,7 +128,7 @@ public class LoggingHandler extends Handler {
                 if (lastLevel == record.getLevel()) {
                     recordsInGroup.add(record);
                 } else {
-                    getChannel().sendMessage(build(recordsInGroup)).queue();
+                    build(recordsInGroup).forEach(s -> getChannel().sendMessage(s).queue());
                     recordsInGroup.clear();
                     recordsInGroup.add(record);
                     lastLevel = record.getLevel();
@@ -125,7 +136,7 @@ public class LoggingHandler extends Handler {
             }
 
             if (recordsInGroup.size() > 0) {
-                getChannel().sendMessage(build(recordsInGroup)).queue();
+                build(recordsInGroup).forEach(s -> getChannel().sendMessage(s).queue());
             }
         }
     }

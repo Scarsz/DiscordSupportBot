@@ -1,5 +1,7 @@
 package github.scarsz.discordsupportbot.discord;
 
+import github.scarsz.discordsupportbot.Application;
+import github.scarsz.discordsupportbot.support.Helpdesk;
 import net.dv8tion.jda.core.EmbedBuilder;
 import net.dv8tion.jda.core.JDA;
 import net.dv8tion.jda.core.JDABuilder;
@@ -9,11 +11,14 @@ import org.slf4j.LoggerFactory;
 
 import javax.security.auth.login.LoginException;
 import java.awt.*;
+import java.util.List;
+import java.util.UUID;
 
 public class Bot extends ListenerAdapter {
 
     private final Logger logger = LoggerFactory.getLogger(Bot.class);
-    private JDA jda;
+    private final JDA jda;
+    private final List<Helpdesk> helpdesks;
 
     public Bot(String token) throws LoginException, InterruptedException {
         logger.info("Bot token is " + token);
@@ -22,6 +27,9 @@ public class Bot extends ListenerAdapter {
                 .setEnableShutdownHook(false) // we have our own shutdown hook
                 .addEventListener(this)
                 .build().awaitReady();
+
+        helpdesks = Helpdesk.collect();
+        logger.info("We're serving " + helpdesks.size() + " helpdesks");
 
         logger.info("Finished JDA initialization");
     }
@@ -35,6 +43,22 @@ public class Bot extends ListenerAdapter {
 
     public JDA getJda() {
         return jda;
+    }
+
+    public List<Helpdesk> getHelpdesks() {
+        return helpdesks;
+    }
+
+    public Helpdesk getHelpdesk(UUID id) {
+        return helpdesks.stream().filter(helpdesk -> helpdesk.getId().equals(id)).findFirst().orElse(null);
+    }
+
+    public static Bot get() {
+        return Application.get().getBot();
+    }
+
+    public Logger getLogger() {
+        return logger;
     }
 
 }
