@@ -7,3 +7,4 @@
 dependency-reduced-pom.xml
 support.db*
 .token
+.secret
