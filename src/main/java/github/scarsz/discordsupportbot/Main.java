@@ -25,7 +25,7 @@ public class Main {
                         ? FileUtils.readFileToString(secretFile, Charset.forName("UTF-8"))
                                 .replace("\n", "")
                                 .replaceAll("/[^A-Za-z0-9.]/", "")
-                : "";
+                        : "";
 
         if (StringUtils.isBlank(token)) {
             System.err.println("No bot token provided");
