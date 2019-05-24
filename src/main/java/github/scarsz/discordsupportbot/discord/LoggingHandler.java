@@ -33,10 +33,23 @@ public class LoggingHandler extends Handler {
             List<Message> messages = history.retrievePast(100).complete();
             if (messages.size() == 0) {
                 break;
-            } else if (messages.size() == 1) {
-                getChannel().deleteMessageById(messages.get(0).getId()).complete();
             } else {
-                getChannel().deleteMessages(messages).complete();
+                List<Message> oldMessages = new ArrayList<>();
+                for (Message message : messages) {
+                    long created = message.getCreationTime().toInstant().toEpochMilli();
+                    if (System.currentTimeMillis() - created > TimeUnit.DAYS.toMillis(14)) {
+                        // message is over the time limit for mass deleting messages
+                        message.delete().queue();
+                        oldMessages.add(message);
+                    }
+                }
+                messages.removeAll(oldMessages);
+
+                if (messages.size() == 1) {
+                    messages.get(0).delete().queue();
+                } else {
+                    getChannel().deleteMessages(messages).queue();
+                }
             }
         }
     }
