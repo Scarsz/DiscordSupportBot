@@ -5,6 +5,6 @@
 /.idea/
 *.iml
 dependency-reduced-pom.xml
-support.db*
+support*db
 .token
 .secret
