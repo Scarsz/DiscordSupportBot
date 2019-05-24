@@ -127,7 +127,8 @@ public class Helpdesk extends ListenerAdapter {
                     }
                 }
         );
-        helpdesks.remove(null);
-        return new LinkedList<>(helpdesks);
+        List<Helpdesk> list = new LinkedList<>(helpdesks);
+        list.remove(null);
+        return list;
     }
 }
