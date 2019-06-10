@@ -25,7 +25,7 @@ public class Database {
                 .connectionProvider(q -> q.receive(connection))
                 .afterQueryListener(details -> {
                     if (details.success()) {
-                        logger.info(details.executionTimeMs() + "ms > " + details.sql());
+                        //logger.info(details.executionTimeMs() + "ms > " + details.sql());
                     } else {
                         logger.error(details.executionTimeMs() + "ms > " + details.sql());
                         details.sqlException().ifPresent(Throwable::printStackTrace);
@@ -101,22 +101,24 @@ public class Database {
     }
 
     public static <T> T get(UUID id, String table, String column) {
-        //noinspection unchecked
-        return query().select("SELECT " + column + " FROM " + table + " WHERE id = ?")
-                .params(id).firstResult(rs -> (T) rs.getObject(1)).orElse(null);
+//        return query().select("SELECT " + column + " FROM " + table + " WHERE id = ?")
+//                .params(id).firstResult(rs -> {
+//                    Object object = rs.getObject(1);
+//                    return object != null ? (T) object : null;
+//                }).orElse(null);
 
-//        try {
-//            ResultSet result = Database.sql("SELECT `" + column + "` FROM `" + table + "` WHERE `uuid` = ?", uuid).executeQuery();
-//            if (result.next()) {
-//                //noinspection unchecked
-//                return (T) result.getObject(column);
-//            } else {
-//                return null;
-//            }
-//        } catch (SQLException e) {
-//            Application.get().getDatabase().logger.error("Failed to retrieve " + column + " for " + uuid + " in " + table + ": " + e.getMessage(), e);
-//            return null;
-//        }
+        try {
+            ResultSet result = Database.sql("SELECT `" + column + "` FROM `" + table + "` WHERE `id` = ?", id).executeQuery();
+            if (result.next()) {
+                //noinspection unchecked
+                return (T) result.getObject(column);
+            } else {
+                return null;
+            }
+        } catch (SQLException e) {
+            Application.get().getDatabase().logger.error("Failed to retrieve " + column + " for " + id + " in " + table + ": " + e.getMessage(), e);
+            return null;
+        }
     }
 
     public static void update(UUID uuid, String table, String column, Object value) {
@@ -132,6 +134,10 @@ public class Database {
 
     public static Query query() {
         return Application.get().getDatabase().query;
+    }
+
+    public static Connection connection() {
+        return Application.get().getDatabase().connection;
     }
 
 }

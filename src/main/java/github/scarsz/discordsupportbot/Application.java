@@ -63,6 +63,7 @@ public class Application extends Thread {
 
         try {
             bot = new Bot(token);
+            bot.init();
         } catch (Exception e) {
             logger.error("Failed to connect to Discord");
             e.printStackTrace();
@@ -78,6 +79,14 @@ public class Application extends Thread {
         }
 
         logger.info("Completely finished initialization");
+
+//        try {
+//            TextChannel category = bot.getJda().getTextChannelById("566883579796389888");
+//            Helpdesk helpdesk = Helpdesk.create(category);
+//            logger.info("Made helpdesk " + helpdesk);
+//        } catch (SQLException | HelpdeskInitializationException e) {
+//            e.printStackTrace();
+//        }
 
         logger.info("Bot is in " + bot.getJda().getGuilds().size() + " guilds");
     }

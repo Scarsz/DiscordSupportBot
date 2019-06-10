@@ -1,10 +1,14 @@
-package github.scarsz.discordsupportbot.error;
+package github.scarsz.discordsupportbot.error.ticket;
 
 import java.util.UUID;
 
-public class TicketInitializationException extends Throwable {
+public abstract class TicketInitializationException extends Throwable {
 
     private final UUID ticket;
+
+    public TicketInitializationException(UUID ticket) {
+        this.ticket = ticket;
+    }
 
     public TicketInitializationException(UUID ticket, String message) {
         super(message);

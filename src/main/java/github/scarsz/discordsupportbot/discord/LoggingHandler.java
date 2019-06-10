@@ -6,6 +6,7 @@ import net.dv8tion.jda.core.JDA;
 import net.dv8tion.jda.core.entities.Message;
 import net.dv8tion.jda.core.entities.MessageHistory;
 import net.dv8tion.jda.core.entities.TextChannel;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -93,7 +94,9 @@ public class LoggingHandler extends Handler {
                 .findFirst().orElse(null);
         String loggerName = function != null ? function.apply(record.getSourceClassName()) : record.getSourceClassName();
 
-        return symbol + " [" + TimeUtil.timestamp(record.getMillis()) + "] " + loggerName + " > " + record.getMessage();
+        String exception = record.getThrown() != null ? ExceptionUtils.getMessage(record.getThrown()) : null;
+
+        return symbol + " [" + TimeUtil.timestamp(record.getMillis()) + "] " + loggerName + " > " + record.getMessage() + (exception != null ? "\n" + exception : "");
     }
 
     public List<String> build(List<LogRecord> records) {

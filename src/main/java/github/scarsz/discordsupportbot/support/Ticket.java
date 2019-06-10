@@ -2,26 +2,33 @@ package github.scarsz.discordsupportbot.support;
 
 import github.scarsz.discordsupportbot.Application;
 import github.scarsz.discordsupportbot.discord.Bot;
-import github.scarsz.discordsupportbot.error.TicketInitializationException;
+import github.scarsz.discordsupportbot.error.ticket.TicketAuthorNotFoundException;
+import github.scarsz.discordsupportbot.error.ticket.TicketChannelNotFoundException;
 import github.scarsz.discordsupportbot.sql.Database;
 import github.scarsz.discordsupportbot.util.TimeUtil;
 import net.dv8tion.jda.core.EmbedBuilder;
 import net.dv8tion.jda.core.Permission;
+import net.dv8tion.jda.core.entities.Guild;
 import net.dv8tion.jda.core.entities.Member;
 import net.dv8tion.jda.core.entities.TextChannel;
 import net.dv8tion.jda.core.entities.User;
+import net.dv8tion.jda.core.events.channel.text.TextChannelDeleteEvent;
 import net.dv8tion.jda.core.events.message.guild.GuildMessageDeleteEvent;
 import net.dv8tion.jda.core.events.message.guild.GuildMessageReceivedEvent;
 import net.dv8tion.jda.core.events.message.guild.GuildMessageUpdateEvent;
 import net.dv8tion.jda.core.events.message.guild.react.GuildMessageReactionAddEvent;
 import net.dv8tion.jda.core.hooks.ListenerAdapter;
 import org.codejargon.fluentjdbc.api.mapper.Mappers;
+import org.h2.api.TimestampWithTimeZone;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.*;
-import java.util.*;
+import java.lang.reflect.Field;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.List;
+import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -33,12 +40,18 @@ public class Ticket extends ListenerAdapter {
     private final Helpdesk helpdesk;
     private final UUID id;
 
-    public Ticket(Helpdesk helpdesk, UUID id) throws TicketInitializationException {
+    public Ticket(Helpdesk helpdesk, UUID id) throws TicketChannelNotFoundException, TicketAuthorNotFoundException {
         this.helpdesk = helpdesk;
         this.id = id;
 
-        if (getChannel() == null) throw new TicketInitializationException(id, "Ticket channel doesn't exist");
-        if (getAuthor() == null) throw new TicketInitializationException(id, "Author is not in server anymore");
+        if (getChannel() == null) {
+            Database.query().update("delete from tickets where id = ?").params(id).run();
+            throw new TicketChannelNotFoundException(id);
+        }
+        if (getAuthor() == null) {
+            Database.query().update("delete from tickets where id = ?").params(id).run();
+            throw new TicketAuthorNotFoundException(id, getAuthorId());
+        }
 
         Application.get().getBot().getJda().addEventListener(this);
 
@@ -50,6 +63,15 @@ public class Ticket extends ListenerAdapter {
         Objects.requireNonNull(author);
 
         int count = Database.get(helpdesk.getId(), "helpdesks", "ticker");
+        count++;
+        try {
+            PreparedStatement statement = Database.connection().prepareStatement("update helpdesks set ticker = ticker + 1 where id = ?");
+            statement.setString(1, helpdesk.getId().toString());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
         TextChannel channel = (TextChannel) helpdesk.getCategory().createTextChannel(String.valueOf(count))
                 .addPermissionOverride(helpdesk.getChannel().getGuild().getMember(author), Permission.ALL_TEXT_PERMISSIONS, 0).complete();
         return create(helpdesk, author, channel);
@@ -60,17 +82,28 @@ public class Ticket extends ListenerAdapter {
         Objects.requireNonNull(author);
         Objects.requireNonNull(channel);
 
-        UUID ticketId = UUID.fromString(Database.query().update("INSERT INTO tickets () VALUES (?, ?, ?)")
+        UUID ticketId = UUID.fromString(Database.query().update("INSERT INTO tickets (helpdesk, author, channel) VALUES (?, ?, ?)")
                 .params(helpdesk.getId(), author.getId(), channel.getId())
                 .runFetchGenKeys(Mappers.singleString()).firstKey().get());
         try {
             Ticket ticket = new Ticket(helpdesk, ticketId);
             helpdesk.getTickets().add(ticket);
             return ticket;
-        } catch (TicketInitializationException e) {
+        } catch (TicketAuthorNotFoundException | TicketChannelNotFoundException e) {
             e.printStackTrace();
             return null;
         }
+    }
+
+    @Override
+    public void onTextChannelDelete(TextChannelDeleteEvent event) {
+        if (!event.getChannel().getId().equals(getChannelId())) return;
+
+        warnings.forEach(scheduledFuture -> scheduledFuture.cancel(false));
+        Bot.get().getJda().removeEventListener(this);
+        helpdesk.getTickets().remove(this);
+        Database.query().update("delete from tickets where id = ?").params(id).run();
+        LOGGER.info("Ticket " + id + " had it's channel deleted");
     }
 
     @Override
@@ -80,7 +113,7 @@ public class Ticket extends ListenerAdapter {
     }
 
     public void processMessage(GuildMessageReceivedEvent event) {
-        boolean isAuthor = event.getAuthor().equals(getAuthor());
+        boolean isAuthor = event.getMember().equals(getAuthor());
         boolean privileged = isAuthor || helpdesk.memberIsHelper(event);
 
         if (isAuthor) {
@@ -124,7 +157,7 @@ public class Ticket extends ListenerAdapter {
         if (!event.getChannel().equals(getChannel())) return;
         if (event.getUser().isBot()) return;
 
-        boolean isAuthor = event.getUser().equals(getAuthor());
+        boolean isAuthor = event.getMember().equals(getAuthor());
         boolean privileged = isAuthor || helpdesk.memberIsHelper(event);
 
         if (event.getReactionEmote().getName().equals("solved")) {
@@ -164,8 +197,8 @@ public class Ticket extends ListenerAdapter {
         warnings.forEach(scheduledFuture -> scheduledFuture.cancel(false));
         warnings.clear();
 
-        Long creationTime = getTime();
-        if (creationTime != null) {
+        long creationTime = getTime();
+        if (helpdesk.getConfig().getExpiration() != null) {
             long expirationTime = TimeUnit.MINUTES.toMillis(helpdesk.getConfig().getExpiration());
             long expiration1 = (long) ((creationTime + (expirationTime * 0.75)) - System.currentTimeMillis());
             long expiration2 = (long) ((creationTime + (expirationTime * 0.9)) - System.currentTimeMillis());
@@ -208,10 +241,10 @@ public class Ticket extends ListenerAdapter {
     public String getAuthorId() {
         return Database.get(id, "tickets", "author");
     }
-    public User getAuthor() {
+    public Member getAuthor() {
         String id = getAuthorId();
         return id != null
-                ? Application.get().getBot().getJda().getUserById(id)
+                ? getGuild().getMemberById(id)
                 : null;
     }
     public void setAuthor(String id) {
@@ -241,15 +274,23 @@ public class Ticket extends ListenerAdapter {
     }
 
     public Status getStatus() {
-        return Status.valueOf(Database.get(id, "tickets", "status"));
+        return Status.values()[(int) Database.get(id, "tickets", "status")];
     }
     public void setStatus(Status status) {
         if (getStatus().equals(Status.SOLVED)) return;
-        Database.update(id, "tickets", "status", status.name());
+        Database.update(id, "tickets", "status", status.ordinal());
     }
 
-    public Long getTime() {
-        return Database.get(id, "tickets", "time");
+    public long getTime() {
+        try {
+            TimestampWithTimeZone timestamp = Database.get(id, "tickets", "time");
+            Field field = TimestampWithTimeZone.class.getDeclaredField("timeNanos");
+            field.setAccessible(true);
+            long millis = TimeUnit.NANOSECONDS.toMillis((long) field.get(timestamp));
+            return millis;
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
     }
     public void setTime(long time) {
         Database.update(id, "tickets", "time", time);
@@ -257,6 +298,10 @@ public class Ticket extends ListenerAdapter {
 
     public UUID getId() {
         return id;
+    }
+
+    public Guild getGuild() {
+        return getChannel().getGuild();
     }
 
     public static List<Ticket> collect(UUID helpdesk) {
@@ -270,8 +315,11 @@ public class Ticket extends ListenerAdapter {
                         .setResult(rs -> {
                             try {
                                 return new Ticket(helpdesk, UUID.fromString(rs.getString("id")));
-                            } catch (TicketInitializationException e) {
-                                Bot.get().getLogger().error("Failed to create ticket " + e.getTicket() + ": " + e.getMessage());
+                            } catch (TicketAuthorNotFoundException | TicketChannelNotFoundException e) {
+                                Bot.get().getLogger().warn("Failed to create ticket " + e.getTicket() + ": " + e.getMessage());
+                                return null;
+                            } catch (Exception e) {
+                                e.printStackTrace();
                                 return null;
                             }
                         })

@@ -89,7 +89,7 @@ public class Configuration {
         setRole(role.getId());
     }
 
-    public int getExpiration() {
+    public Integer getExpiration() {
         return Database.get(uuid, "helpdesks", "expiration");
     }
     public void setExpiration(int minutes) {

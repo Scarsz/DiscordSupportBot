@@ -18,7 +18,7 @@ public class Bot extends ListenerAdapter {
 
     private final Logger logger = LoggerFactory.getLogger(Bot.class);
     private final JDA jda;
-    private final List<Helpdesk> helpdesks;
+    private List<Helpdesk> helpdesks;
 
     public Bot(String token) throws LoginException, InterruptedException {
         logger.info("Bot token is " + token);
@@ -27,7 +27,9 @@ public class Bot extends ListenerAdapter {
                 .setEnableShutdownHook(false) // we have our own shutdown hook
                 .addEventListener(this)
                 .build().awaitReady();
+    }
 
+    public void init() {
         helpdesks = Helpdesk.collect();
         logger.info("We're serving " + helpdesks.size() + " helpdesks");
 

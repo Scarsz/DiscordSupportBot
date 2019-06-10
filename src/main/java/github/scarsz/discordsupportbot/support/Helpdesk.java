@@ -12,6 +12,7 @@ import net.dv8tion.jda.core.entities.TextChannel;
 import net.dv8tion.jda.core.events.message.guild.GuildMessageReceivedEvent;
 import net.dv8tion.jda.core.events.message.guild.react.GuildMessageReactionAddEvent;
 import net.dv8tion.jda.core.hooks.ListenerAdapter;
+import org.codejargon.fluentjdbc.api.mapper.Mappers;
 
 import java.awt.*;
 import java.util.List;
@@ -19,6 +20,29 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class Helpdesk extends ListenerAdapter {
+
+    public static Helpdesk create(Category category) throws HelpdeskInitializationException {
+        if (category.getTextChannels().size() == 0) {
+            throw new IllegalArgumentException("Given category " + category + " doesn't contain at least one text channel");
+        }
+
+        return create(category, category.getTextChannels().get(0));
+    }
+
+    public static Helpdesk create(TextChannel channel) throws HelpdeskInitializationException {
+        if (channel.getParent() == null) {
+            throw new IllegalArgumentException("Given text channel " + channel + " doesn't have a parent");
+        }
+
+        return create(channel.getParent(), channel);
+    }
+
+    public static Helpdesk create(Category category, TextChannel channel) throws HelpdeskInitializationException {
+        UUID uuid = UUID.fromString(Database.query().update("insert into helpdesks (category, channel) values (?, ?)")
+                .params(category.getId(), channel.getId())
+                .runFetchGenKeys(Mappers.singleString()).firstKey().get());
+        return new Helpdesk(uuid);
+    }
 
     private final UUID id;
     private final Configuration config;
@@ -42,12 +66,13 @@ public class Helpdesk extends ListenerAdapter {
 
     @Override
     public void onGuildMessageReceived(GuildMessageReceivedEvent event) {
-        if (!event.getChannel().equals(event.getChannel())) return;
+        if (!event.getChannel().equals(config.getChannel())) return;
         if (event.getAuthor().isFake() || event.isWebhookMessage() || event.getAuthor().isBot()) return;
         if (event.getMessage().getContentRaw().equals(".") && (event.getMember().hasPermission(Permission.ADMINISTRATOR) || memberIsHelper(event.getMember()))) return;
         if (recentTickets.containsKey(event.getAuthor().getId())) {
             tickets.stream().filter(t -> t.getId().equals(recentTickets.get(event.getAuthor().getId())))
                     .findFirst().ifPresent(t -> t.processMessage(event));
+            event.getMessage().delete().queue();
             return;
         }
 
@@ -70,8 +95,8 @@ public class Helpdesk extends ListenerAdapter {
         recentTickets.put(event.getAuthor().getId(), ticket.getId());
         event.getMessage().delete().queue(v -> event.getChannel().sendMessage(event.getAuthor().getAsMention()).embed(new EmbedBuilder()
                 .setColor(Color.GREEN)
-                .setTitle("A ticket has been made for your query: " + ticket.getChannel().getAsMention())
-                .setDescription("Direct further messages to this channel.")
+                .setTitle("A ticket has been made for your query!")
+                .setDescription("Direct further messages to " + ticket.getChannel().getAsMention() + ".")
                 .build()
         ).queue(
                 m -> m.delete().queueAfter(30, TimeUnit.SECONDS,
